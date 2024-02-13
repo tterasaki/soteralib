@@ -8,28 +8,33 @@ from sotodlib import core
 from sotodlib.io import load_smurf as ls
 from sotodlib.io.load_smurf import Observations, Files, TuneSets, Tunes
 from sotodlib.tod_ops.fft_ops import calc_psd, calc_wn
+from sotodlib.io import g3tsmurf_utils
+from sodetlib.operations.iv import IVAnalysis
 
 pA_per_phi0 = 9e6
 phase_to_pA = pA_per_phi0 / (2*np.pi)
 
-def load_data_level2(obs_id, telescope='satp1', slice_obs_files=slice(None,None), unit='pA',
-                    bgmap_style='last', iv_style='last', biasstep_style='last', 
-                    calc_PSD=True):
+def get_obs_all_level2(telescope):
     if telescope == 'satp1':
         archive_path='/so/level2-daq/satp3/timestreams/'
         db_path='/so/level2-daq/databases/satp3/g3tsmurf.db'
         meta_path='/so/level2-daq/satp3/smurf/'
         hk_db_path='/so/level2-daq/databases/satp3/g3hk.db'
-        
     elif telescope == 'satp3':
         archive_path='/so/level2-daq/satp3/timestreams/'
         db_path='/so/level2-daq/databases/satp3/g3tsmurf.db'
         meta_path='/so/level2-daq/satp3/smurf/'
         hk_db_path='/so/level2-daq/databases/satp3/g3hk.db'
-    
     SMURF = ls.G3tSmurf(archive_path=archive_path, db_path=db_path, meta_path=meta_path, hk_db_path=hk_db_path)
     session = SMURF.Session()
     obs_all = session.query(Observations)
+    return SMURF, session, obs_all
+    
+def load_data_level2(obs_id, telescope='satp1', slice_obs_files=slice(None,None), unit='pA',
+                    bgmap_style='last', iv_style='last', biasstep_style='last', 
+                    calc_PSD=True):
+    SMURF, session, obs_all = get_obs_all_level2(telescope)
+    
     obs = obs_all.filter(Observations.obs_id == obs_id).one()
     fs = [f.name.replace('data', 'so/level2-daq') for f in obs.files[slice_obs_files]]
     aman = ls.load_file(fs, archive=SMURF)
@@ -102,12 +107,11 @@ def wrap_iv(aman, iv_file):
     return
 
 def wrap_biasstep(aman, biasstep_file):
-    biasstep_file = g3tsmurf_utils.get_last_bias_step(obs_id, SMURF)
     bias_step_ana = np.load(biasstep_file, allow_pickle=True).item()
     bsman = core.AxisManager(aman.dets, aman.bias_lines)
     bsman.wrap('R0', bias_step_ana['R0'], [(0, 'dets')])
     bsman.wrap('tau_eff', bias_step_ana['tau_eff'], [(0, 'dets')])
-    bsman.wrap('Rfrac', bsman.R0/ivman.R_n, [(0, 'dets')])
+    bsman.wrap('Rfrac', bsman.R0/aman.iv.R_n, [(0, 'dets')])
     bsman.wrap('I0', bias_step_ana['I0'], [(0, 'dets')])
     bsman.wrap('V0', bias_step_ana['R0'] * bias_step_ana['I0'], [(0, 'dets')])
     bsman.wrap('si', bias_step_ana['Si'], [(0, 'dets')])
