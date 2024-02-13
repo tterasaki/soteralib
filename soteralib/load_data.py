@@ -8,31 +8,29 @@ from sotodlib import core
 from sotodlib.io import load_smurf as ls
 from sotodlib.io.load_smurf import Observations, Files, TuneSets, Tunes
 from sotodlib.tod_ops.fft_ops import calc_psd, calc_wn
-from sotodlib.io import g3tsmurf_utils
+from sotodlib.io import g3tsmurf_utils, hk_utils
 from sodetlib.operations.iv import IVAnalysis
 
 pA_per_phi0 = 9e6
 phase_to_pA = pA_per_phi0 / (2*np.pi)
 
+#################################################################
+########################## Level 2 ##############################
+#################################################################
 def get_obs_all_level2(telescope):
-    if telescope == 'satp1':
-        archive_path='/so/level2-daq/satp3/timestreams/'
-        db_path='/so/level2-daq/databases/satp3/g3tsmurf.db'
-        meta_path='/so/level2-daq/satp3/smurf/'
-        hk_db_path='/so/level2-daq/databases/satp3/g3hk.db'
-    elif telescope == 'satp3':
-        archive_path='/so/level2-daq/satp3/timestreams/'
-        db_path='/so/level2-daq/databases/satp3/g3tsmurf.db'
-        meta_path='/so/level2-daq/satp3/smurf/'
-        hk_db_path='/so/level2-daq/databases/satp3/g3hk.db'
+    archive_path=f'/so/level2-daq/{telescope}/timestreams/'
+    db_path=f'/so/level2-daq/databases/{telescope}/g3tsmurf.db'
+    meta_path=f'/so/level2-daq/{telescope}/smurf/'
+    hk_db_path=f'/so/level2-daq/databases/{telescope}/g3hk.db'
+    
     SMURF = ls.G3tSmurf(archive_path=archive_path, db_path=db_path, meta_path=meta_path, hk_db_path=hk_db_path)
     session = SMURF.Session()
     obs_all = session.query(Observations)
     return SMURF, session, obs_all
     
-def load_data_level2(obs_id, telescope='satp1', slice_obs_files=slice(None,None), unit='pA',
+def load_data_level2(obs_id, telescope, slice_obs_files=slice(None,None), unit='pA',
                     bgmap_style='last', iv_style='last', biasstep_style='last', 
-                    calc_PSD=True):
+                    calc_PSD=True, load_acu=True, load_fake_focal_plane=True):
     SMURF, session, obs_all = get_obs_all_level2(telescope)
     
     obs = obs_all.filter(Observations.obs_id == obs_id).one()
@@ -77,6 +75,13 @@ def load_data_level2(obs_id, telescope='satp1', slice_obs_files=slice(None,None)
         freqs, Pxx = calc_psd(aman, nperseg=200*60, merge=True)
         wn = calc_wn(aman, pxx=Pxx, freqs=freqs)
         aman.wrap('wn', wn, [(0, 'dets')])
+        
+    if load_acu:
+        wrap_acu(aman, telescope)
+        
+    if load_fake_focal_plane:
+        wrap_fake_focalplane(aman)
+        
     return aman
 
 def wrap_bgmap(aman, bgmap_file):
@@ -129,12 +134,42 @@ def wrap_biasstep(aman, biasstep_file):
     aman.wrap('biasstep', bsman)
     return
     
+def wrap_acu(aman, telescope):
+    acu_aman = hk_utils.get_detcosamp_hkaman(aman, alias=['az', 'el'],
+                              fields = [f'{telescope}.acu.feeds.acu_udp_stream.Corrected_Azimuth',
+                                        f'{telescope}.acu.feeds.acu_udp_stream.Corrected_Elevation'],
+                              data_dir = f'/so/level2-daq/{telescope}/hk')
+    az = acu_aman.acu.acu[0]
+    el = acu_aman.acu.acu[1]
     
-def get_obsdict(ctx_file, query_line=None):
-    #query_line_example = 'start_time > 1704200000 and type == "obs"'
+    bman = core.AxisManager(aman.samps)
+    bman.wrap('az', np.deg2rad(az), [(0, 'samps')])
+    bman.wrap('el', np.deg2rad(el), [(0, 'samps')])
+    bman.wrap('roll', 0*bman.az, [(0, 'samps')])
+    aman.wrap('boresight', bman)
+    return
+
+def wrap_fake_focalplane(aman):
+    fp = core.AxisManager(aman.dets)
+    for key, value in zip(['xi', 'eta', 'gamma'], [0, 0, 0]):
+        fp.wrap_new(key, shape=('dets', ))[:] = value
+    aman.wrap('focal_plane', fp)
+    return
+    
+
+#################################################################
+########################## Level 3 ##############################
+#################################################################
+def get_obsdict(ctx_file, query_line=None, query_tags=None):
+    
     ctx = core.Context(ctx_file)
     if query_line is not None:
-        obslist= ctx.obsdb.query(query_line)
+        if query_tags is None:
+            #query_line_example = 'start_time > 1704200000 and type == "obs"'
+            obslist= ctx.obsdb.query(query_line)
+        else:
+            #query_tags_example = ['jupiter=1', 'rising=1']
+            obslist= ctx.obsdb.query(query_line, query_tags)
     else:
         obslist= ctx.obsdb.query()
         
