@@ -129,8 +129,27 @@ def wrap_biasstep(aman, biasstep_file):
     aman.wrap('biasstep', bsman)
     return
     
-def load_data_level3():
-    return
     
+def get_obsdict(ctx_file, query_line=None):
+    #query_line_example = 'start_time > 1704200000 and type == "obs"'
+    ctx = core.Context(ctx_file)
+    if query_line is not None:
+        obslist= ctx.obsdb.query(query_line)
+    else:
+        obslist= ctx.obsdb.query()
+        
+    oids = np.unique([o['obs_id'] for o in obslist])
+    obs_dict = {}
+    for o in oids:
+        _obsdict = ctx.obsdb.get(o, tags=True)
+        obs_dict[o] = _obsdict
+    return obs_dict
+    
+def load_data_level3(obs_id, ctx_file, meta=None):
+    ctx = core.Context(ctx_file)
+    if meta is None:
+        meta = ctx.get_meta(obs_id)
+    aman = ctx.get_obs(meta)
+    return aman
         
     
