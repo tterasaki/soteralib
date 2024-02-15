@@ -37,8 +37,7 @@ def load_data_level2(obs_id, telescope, slice_obs_files=slice(None,None), unit='
     fs = [f.name.replace('data', 'so/level2-daq') for f in obs.files[slice_obs_files]]
     aman = ls.load_file(fs, archive=SMURF)
     
-    if unit=='pA':
-        aman.signal *= phase_to_pA
+
         
     # bgmap
     if bgmap_style == 'last':
@@ -70,6 +69,13 @@ def load_data_level2(obs_id, telescope, slice_obs_files=slice(None,None), unit='
     else:
         pass
     
+    if unit=='pA':
+        aman.signal *= phase_to_pA
+    elif unit=='pW':
+        aman.signal *= phase_to_pA
+        aman.signal /= - aman.biasstep.si[:, np.newaxis]
+        
+        
     # calculate PSD
     if calc_PSD:
         freqs, Pxx = calc_psd(aman, nperseg=200*60, merge=True)
