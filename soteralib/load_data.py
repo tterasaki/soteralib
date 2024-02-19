@@ -10,6 +10,7 @@ from sotodlib.io.load_smurf import Observations, Files, TuneSets, Tunes
 from sotodlib.tod_ops.fft_ops import calc_psd, calc_wn
 from sotodlib.io import g3tsmurf_utils, hk_utils
 from sodetlib.operations.iv import IVAnalysis
+from sotodlib.io.metadata import read_dataset
 
 pA_per_phi0 = 9e6
 phase_to_pA = pA_per_phi0 / (2*np.pi)
@@ -30,7 +31,8 @@ def get_obs_all_level2(telescope):
     
 def load_data_level2(obs_id, telescope, slice_obs_files=slice(None,None), unit='pA',
                     bgmap_style='last', iv_style='last', biasstep_style='last', 
-                    calc_PSD=True, load_acu=True, load_fake_focal_plane=True):
+                    calc_PSD=True, load_acu=True, load_fake_focal_plane=True, 
+                    load_pointing=False, pointing_hdf=None):
     SMURF, session, obs_all = get_obs_all_level2(telescope)
     
     obs = obs_all.filter(Observations.obs_id == obs_id).one()
@@ -87,6 +89,9 @@ def load_data_level2(obs_id, telescope, slice_obs_files=slice(None,None), unit='
         
     if load_fake_focal_plane:
         wrap_fake_focalplane(aman)
+    elif load_pointing:
+        wrap_fake_focalplane(aman)
+        wrap_pointing(aman, pointing_hdf)
         
     return aman
 
@@ -162,6 +167,17 @@ def wrap_fake_focalplane(aman):
     aman.wrap('focal_plane', fp)
     return
     
+    
+def wrap_pointing(aman, pointing_hdf):
+    rset = read_dataset(pointing_hdf, 'focalplane')
+    for di, det in enumerate(aman.dets.vals):
+        map_idx = np.where(rset['dets:readout_id']==det)[0][0]
+        xi = rset['xi'][map_idx]
+        eta = rset['eta'][map_idx]
+        aman.focal_plane.xi[di] = xi
+        aman.focal_plane.eta[di] = eta
+    aman.restrict('dets', aman.dets.vals[~np.isnan(aman.focal_plane.xi)])
+    return
 
 #################################################################
 ########################## Level 3 ##############################
