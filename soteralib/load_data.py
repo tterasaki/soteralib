@@ -76,6 +76,8 @@ def load_data_level2(obs_id, telescope, slice_obs_files=slice(None,None), unit='
     elif unit=='pW':
         aman.signal *= phase_to_pA
         aman.signal /= - aman.biasstep.si[:, np.newaxis]
+    else:
+        raise(ValueError)
         
         
     # calculate PSD
