@@ -3,6 +3,8 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import soteralib as tera
+
 import sotodlib
 from sotodlib import tod_ops, coords
 from sotodlib.io import load_smurf as ls
@@ -26,7 +28,7 @@ def restrict_highSN(aman, SNR_man):
     aman.restrict('dets', SNR_man.dets.vals)
     return
 
-def tod_process_v1(aman):
+def tod_process_v1(aman, apply_fourier_filt=False, remove_glitchy=False, glitchy_th=0.01):
     print('detrend')
     tod_ops.detrend_tod(aman)
     
@@ -40,11 +42,12 @@ def tod_process_v1(aman):
     coords.planets.compute_source_flags(aman, center_on='jupiter', max_pix=100000000,
                                    wrap='jupiter', mask={'shape':'circle', 'xyr':[0,0,1]})
     
-    # Low pass filter
-    print('lowpass filter')
+    # Low pass filter if specified
     tod_ops.apodize_cosine(aman)
-    filt = tod_ops.filters.get_lpf({'type': 'sine2', 'cutoff': 1.9, 'trans_width':0.1})
-    aman.signal = tod_ops.fourier_filter(aman, filt, signal_name='signal')
+    if apply_fourier_filt:
+        print('lowpass filter')
+        filt = tod_ops.filters.get_lpf({'type': 'sine2', 'cutoff': 1.9, 'trans_width':0.1})
+        aman.signal = tod_ops.fourier_filter(aman, filt, signal_name='signal')
     aman.restrict('samps', (aman.samps.offset + 2000, aman.samps.offset + aman.samps.count -2000))
     
     # glitch flagging
@@ -56,8 +59,8 @@ def tod_process_v1(aman):
     aman.flags.reduce(['anti_jupiter','glitches'], method='intersect', wrap=True, new_flag='glitches', remove_reduced=True)
 
     # remove too glithcy dets
-    #aman.restrict('dets', aman.dets.vals[np.mean(aman.flags.glitches.mask(), axis=1) < 0.01])
-    
+    if remove_glitchy:
+        aman.restrict('dets', aman.dets.vals[np.mean(aman.flags.glitches.mask(), axis=1) < glitchy_th])
     
     # take union for mask for subscan_poly
     aman.flags.reduce(['jupiter', 'glitches'], method='union', wrap=True, new_flag='jupiter_and_glitches', remove_reduced=False)
@@ -137,5 +140,50 @@ def main_Run11(obs_id):
     res_deg = 0.1
     save_dir = '/so/home/tterasaki/summary/2402_abscal/MF2_Run11/single_detmaps_Run11/'
     file_name = f'{obs_id}_single_detmaps.hdf'
+    make_single_detmaps(aman, save_dir, file_name, cuts=cuts, res_deg=res_deg)
+    return
+
+def wrap_isband_level3(aman):
+    det_types = []
+    for _did in aman.det_info.det_id:
+        _det_type = _did.split('_')[1]
+        if _det_type == 'MATCH':
+            det_types.append('no_match')
+        elif _det_type == 'DARK':
+            det_types.append('dark')
+        else:
+            det_types.append(_det_type)
+
+    det_types = np.array(det_types)
+    aman.wrap('det_types', det_types, [(0, 'dets')])
+
+    is90_match = aman.det_types=='f090'
+    is150_match = aman.det_types=='f150'
+    aman.wrap('is90', is90_match, [(0, 'dets')])
+    aman.wrap('is150', is150_match, [(0, 'dets')])
+    return
+    
+def main_SCR2_level3(obs_id, ws):
+    #obs_id = 'obs_1698990364_satp1_1111111'
+    
+    ctx_file = '/so/home/tterasaki/summary/2402_abscal/MF1_SCR2_level3/context.yaml'
+    ctx = core.Context(ctx_file)
+    meta = ctx.get_meta(obs_id)
+    meta.restrict('dets', meta.dets.vals[meta.det_info.wafer_slot==ws])
+    aman = ctx.get_obs(meta)
+    aman.restrict('dets', aman.dets.vals[~np.isnan(aman.focal_plane.xi)])
+    aman.signal *= tera.load_data.phase_to_pA
+    
+    # wrap is90 and is150
+    wrap_isband_level3(aman)
+    
+    # TOD processing
+    tod_process_v1(aman)
+    
+    # Single detmap making
+    cuts = aman.flags.glitches
+    res_deg = 0.1
+    save_dir = '/so/home/tterasaki/summary/2402_abscal/MF1_SCR2_level3/single_detmaps_SCR2/'
+    file_name = f'{obs_id}_{ws}_single_detmaps.hdf'
     make_single_detmaps(aman, save_dir, file_name, cuts=cuts, res_deg=res_deg)
     return
