@@ -6,5 +6,6 @@ setup(
     description="Terasaki's package for SO analysis",
     author='tterasaki',
     packages=find_packages(),
-    license='MIT'
+    license='MIT',
+    include_package_data=True,
 )

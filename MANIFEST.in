@@ -1,0 +1,1 @@
+include soteralib/data/detector_bandpass/*.h5

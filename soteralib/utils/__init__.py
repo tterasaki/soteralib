@@ -6,3 +6,5 @@ from .Tconverter import (Tth2brightness, Trj2brightness, Tkcmb2brightness,
                         Tkcmb2Tth, Tkcmb2Trj)
 
 from .circular_stats import (circular_mean, circular_std)
+
+from .bandpass import (get_detector_bandpass, band_average)
