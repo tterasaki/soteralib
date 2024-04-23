@@ -3,7 +3,6 @@ import os
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt 
-
 import transfer_matrix as tm
 
 ########## AR parameters #############

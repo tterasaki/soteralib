@@ -12,7 +12,6 @@ from sotodlib.io.load_smurf import Observations, Files, TuneSets, Tunes
 from sotodlib.tod_ops.fft_ops import calc_psd, calc_wn
 from sotodlib.io import g3tsmurf_utils, hk_utils
 from sodetlib.operations.iv import IVAnalysis
-from sotodlib import coords
 from so3g.proj import Ranges, RangesMatrix
 
 import soteralib
@@ -39,8 +38,16 @@ def tod_process_v1(aman, apply_fourier_filt=False, remove_glitchy=False, glitchy
                          truncate=False, qlim=1)
     
     print('compute source flag')
-    coords.planets.compute_source_flags(aman, center_on='jupiter', max_pix=100000000,
-                                   wrap='jupiter', mask={'shape':'circle', 'xyr':[0,0,1]})
+    jupiter_flags = coords.planets.compute_source_flags(aman, center_on='jupiter', max_pix=100000000,
+                                       wrap=None, mask={'shape':'circle', 'xyr':[0,0,1]})
+    aman.flags.wrap('jupiter', jupiter_flags)
+    
+    print('restrict only dets hit jupiter')
+    hit_jupiter = np.mean(jupiter_flags.mask(), axis=1)
+    hit_jupiter = hit_jupiter > 0.
+    hit_jupiter = hit_jupiter.astype('bool')
+    aman.restrict('dets', aman.dets.vals[hit_jupiter])
+    print(f'# of dets: {aman.dets.count}')
     
     # Low pass filter if specified
     tod_ops.apodize_cosine(aman)
@@ -48,13 +55,14 @@ def tod_process_v1(aman, apply_fourier_filt=False, remove_glitchy=False, glitchy
         print('lowpass filter')
         filt = tod_ops.filters.get_lpf({'type': 'sine2', 'cutoff': 1.9, 'trans_width':0.1})
         aman.signal = tod_ops.fourier_filter(aman, filt, signal_name='signal')
-    aman.restrict('samps', (aman.samps.offset + 2000, aman.samps.offset + aman.samps.count -2000))
+    aman.restrict('samps', (aman.samps.offset+2000, aman.samps.offset + aman.samps.count-2000))
     
     # glitch flagging
     print('glitch flagging')
     tod_ops.flags.get_glitch_flags(aman, overwrite=True)
     
     # remove jupiter signal from glitches
+    
     aman.flags.wrap('anti_jupiter', ~aman.flags.jupiter)
     aman.flags.reduce(['anti_jupiter','glitches'], method='intersect', wrap=True, new_flag='glitches', remove_reduced=True)
 
