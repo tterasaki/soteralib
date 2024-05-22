@@ -62,7 +62,6 @@ def tod_process_v1(aman, apply_fourier_filt=False, remove_glitchy=False, glitchy
     tod_ops.flags.get_glitch_flags(aman, overwrite=True)
     
     # remove jupiter signal from glitches
-    
     aman.flags.wrap('anti_jupiter', ~aman.flags.jupiter)
     aman.flags.reduce(['anti_jupiter','glitches'], method='intersect', wrap=True, new_flag='glitches', remove_reduced=True)
 
