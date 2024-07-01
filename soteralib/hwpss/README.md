@@ -28,8 +28,17 @@ Leakage Statistics
   * `coeffsQ` and `coeffsU`
   * `sigma_coeffsQ` and `sigma_coeffsU`
 
+The values in telescope coordinate is specified with suffixes of `_tele`.
+All values with telescope coordinate are listed below:
+* 4f HWPSS
+ * hwpss4f_Q_tele_val, hwpss4f_Q_tele_err
+ * hwpss4f_U_tele_val, hwpss4f_U_tele_err
+ * hwpss4f_P_tele_val, hwpss4f_P_tele_err
+ * hwpss4f_theta_tele_val, hwpss4f_theta_tele_err
+* T-to-4f_ leakage
+ * leakage4f_Q_tele_val, leakage4f_Q_tele_err
+ * leakage4f_U_tele_val, leakage4f_U_tele_err
+ * leakage4f_P_tele_val, leakage4f_P_tele_err
+ * leakage4f_theta_tele_val, leakage4f_theta_tele_err
+(あとで2fを追加する。)
 
-
-
-
-# TOD tools
