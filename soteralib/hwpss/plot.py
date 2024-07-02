@@ -1,6 +1,11 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+cm = matplotlib.colormaps.get_cmap('viridis')
+
 # Plot the quiver of HWPSS
-def plot_HWPSS_quiver(aman, figax=None, quiver_scale=8**2, z_scale=1, shrink=0.8,
-                      theta_name='theta_pol_mean', P_name='demodP_mean', colorbar_label=None):
+def plot_quiver(aman, figax=None, quiver_scale=8**2, z_scale=1, shrink=0.8,
+                      P_name='hwpss4f_P_tele_val', theta_name='hwpss4f_theta_tele_val', colorbar_label=None):
     if figax is None:
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
     else:
@@ -167,7 +172,6 @@ def plot_onedet_QUplane(aman, di, ds_factor=100,
     
     fig.tight_layout()
     return fig, ax
-
 
 
 
