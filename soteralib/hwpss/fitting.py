@@ -61,7 +61,7 @@ def do_fit(aman, mode='hwpss4f', err_relax_factor=1):
     
     # fit the model to the data
     m.migrad()
-    m.minos()total
+    m.minos()
     
     return m
 
@@ -119,7 +119,22 @@ def wrap_model(aman, m, mode='hwpss4f'):
     for name, param in zip(total_model_param_names, total_model_params):
         aman.wrap(name, param)
         
+    for key, val in m.values.to_dict().items():
+        aman.wrap(f'{mode}_{key}_val', val)
+    for key, val in m.errors.to_dict().items():
+        aman.wrap(f'{mode}_{key}_err', val)
+    redchi2 = m.fval / (aman.dets.count*2 - len(m.values) + np.count_nonzero(m.fixed.to_dict().values()))
+    aman.wrap(f'{mode}_redchi2', redchi2)
+        
     return
+
+def do_main(aman):
+    modes = ['hwpss4f', 'leakage4f']
+    for mode in modes:
+        m = do_fit(aman, mode=mode, err_relax_factor=1)
+        wrap_model(aman, m, mode=mode)
+    return
+
 
 
 # aman = core.AxisManager.load('result01_combined/obs_1714176018_satp1_1111111_f150.hdf')

@@ -5,12 +5,14 @@ cm = matplotlib.colormaps.get_cmap('viridis')
 
 # Plot the quiver of HWPSS
 def plot_quiver(aman, figax=None, quiver_scale=8**2, z_scale=1, shrink=0.8,
-                      P_name='hwpss4f_P_tele_val', theta_name='hwpss4f_theta_tele_val', colorbar_label=None):
+                      P_name='hwpss4f_P_tele_val', theta_name='hwpss4f_theta_tele_val', label=None, colorbar_label=None):
     if figax is None:
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
     else:
         fig, ax = figax
     quiveropts = dict(scale=quiver_scale, width=0.003, headlength=0, pivot='middle')
+    
+    #normを引数として渡せるようにする
     norm = matplotlib.colors.Normalize(vmin=np.percentile(z_scale * aman[P_name], 10), 
                                        vmax=np.percentile(z_scale * aman[P_name], 90), clip=False)
                                        
@@ -20,6 +22,7 @@ def plot_quiver(aman, figax=None, quiver_scale=8**2, z_scale=1, shrink=0.8,
                    z_scale * aman[P_name],
                    alpha=0.8, cmap=cm,
                    norm=norm,
+                   label=label,
                    headaxislength=0, **quiveropts)
 
     fig.colorbar(im, ax=ax, orientation='horizontal', label=colorbar_label, shrink=shrink)
@@ -30,6 +33,109 @@ def plot_quiver(aman, figax=None, quiver_scale=8**2, z_scale=1, shrink=0.8,
     ax.set_aspect(1)
     return fig, ax
 
+def plot_data_model_comparison(aman, mode='hwpss4f'):
+    assert mode in ['hwpss4f', 'leakage4f']
+    
+    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+    
+    for ax in axes:
+        ax.set_xlim(-19, 19)
+        ax.set_ylim(-19, 19)
+
+    if mode == 'hwpss4f':
+        z_scale = 1e3
+        ah_plot.plot_quiver(aman, figax=(fig, axes[0]),
+                            P_name='hwpss4f_P_tele_val', theta_name='hwpss4f_theta_tele_val', 
+                            z_scale=z_scale, colorbar_label='4f HWPSS Amplitude[pW]')
+
+        fit_label = f'uniform_amp: {aman.hwpss4f_uniform_P_val*z_scale:.2f} [pA]\n'
+        fit_label += f'radial_amp: {aman.hwpss4f_radial_P_pivot_val*z_scale:.2f} [pA]\n'
+        fit_label += f'redchi2: {aman.hwpss4f_redchi2:.2f}'
+        
+        ah_plot.plot_quiver(aman, figax=(fig, axes[1]),
+                            P_name='hwpss4f_P_total_model', theta_name='hwpss4f_theta_total_model',
+                            z_scale=z_scale, colorbar_label='4f HWPSS Amplitude[pW]',
+                           label=fit_label)
+        axes[1].legend()
+        axes[0].set_title(f'HWPSS data')
+        axes[1].set_title(f'HWPSS fit')
+        
+    elif mode == 'leakage4f':
+        z_scale = 1e2
+        ah_plot.plot_quiver(aman, figax=(fig, axes[0]),
+                            P_name='leakage4f_P_tele_val', theta_name='leakage4f_theta_tele_val', 
+                            z_scale=z_scale, colorbar_label='4f Laakage Coefficient [%]')
+
+        fit_label = f'uniform_coeff: {aman.leakage4f_uniform_P_val*z_scale:.2f} [%]\n'
+        fit_label += f'radial_coeff: {aman.leakage4f_radial_P_pivot_val*z_scale:.2f} [%]\n'
+        fit_label += f'redchi2: {aman.leakage4f_redchi2:.2f}'
+        
+        ah_plot.plot_quiver(aman, figax=(fig, axes[1]),
+                            P_name='leakage4f_P_total_model', theta_name='leakage4f_theta_total_model',
+                            z_scale=z_scale, colorbar_label='4f Laakage Coefficient [%]',
+                           label=fit_label)
+        axes[1].legend()
+
+        
+        axes[0].set_title(f'Leakage data')
+        axes[1].set_title(f'Leakage fit')
+            
+    telescope = aman.obs_info.telescope
+    bandpass = aman.det_info.wafer.bandpass[0]
+    pwv = np.nanmedian(aman.pwv_class)
+    fig.suptitle(f'{telescope}, {bandpass}, pwv={pwv:.2f}')
+    fig.tight_layout()
+
+def plot_hwpss_radial_profile(aman):
+    fig, ax = plt.subplots(1, 3, figsize=(18, 6))
+    wafer_slots = [f'ws{i}' for i in range(7)]
+    for ws in wafer_slots:
+        mask = aman.det_info.wafer_slot == ws
+        ax[0].plot(180/np.pi*aman.focal_plane.theta_fp[mask], 1e3*aman.hwpss4f_P_tele_val[mask], '.', label=f'{ws}')
+        ax[1].plot(180/np.pi*aman.focal_plane.theta_fp[mask], 1e3*aman.hwpss4f_P_total_model[mask], '.', label=f'{ws}')
+        ax[2].plot(180/np.pi*aman.focal_plane.theta_fp[mask], 1e3*(aman.hwpss4f_P_tele_val[mask] - aman.hwpss4f_P_total_model[mask])
+                   , '.', label=f'{ws}')
+
+    ax[0].set_title('HWPSS data')
+    ax[1].set_title('HWPSS model')
+    ax[2].set_title('HWPSS residual')
+
+    for a in ax[:]:
+        a.set_xlabel('distance from fp center [deg]')
+        a.set_ylabel('HWPSS amplitude [pW]')
+        a.grid()
+        a.legend()
+    for a in ax[:-1]:
+        a.set_ylim(-0.2, 20)
+    ax[-1].set_ylim(-10, 10)
+
+    fig.tight_layout()
+    return
+
+def plot_leakage_radial_profile(aman):
+    fig, ax = plt.subplots(1, 3, figsize=(18, 6))
+    wafer_slots = [f'ws{i}' for i in range(7)]
+    for ws in wafer_slots:
+        mask = aman.det_info.wafer_slot == ws
+        ax[0].plot(180/np.pi*aman.focal_plane.theta_fp[mask], 100*aman.leakage4f_P_tele_val[mask], '.', label=f'{ws}')
+        ax[1].plot(180/np.pi*aman.focal_plane.theta_fp[mask], 100*aman.leakage4f_P_total_model[mask], '.', label=f'{ws}')
+        ax[2].plot(180/np.pi*aman.focal_plane.theta_fp[mask], 100*(aman.leakage4f_P_tele_val[mask] - aman.leakage4f_P_total_model[mask]),
+                   '.', label=f'{ws}')
+
+    ax[0].set_title('leakage data')
+    ax[1].set_title('leakage model')
+    ax[2].set_title('leakage residual')
+
+    for a in ax:
+        a.set_xlabel('distance from fp center [deg]')
+        a.set_ylabel('leakge coeff [%]')
+
+        a.grid()
+        a.legend()
+    for a in ax[:-1]:
+        a.set_ylim(-0.2, 2)
+    ax[-1].set_ylim(-1, 1)
+    return
 
 # Plot one detector (for debug)
 def plot_onedet_timestreams(aman, di, demodQ_name='demodQ', demodU_name='demodU'):

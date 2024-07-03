@@ -343,7 +343,7 @@ def main():
 
     obs_id = args.obs_id
     bandpass = args.bandpass
-    debug = args.debugkkkkkk
+    debug = args.debug
     if debug==0:
         debug = False
     wafer_slot = args.wafer_slot
