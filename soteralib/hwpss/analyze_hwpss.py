@@ -27,18 +27,19 @@ from sotodlib.hwp.hwp_angle_model import apply_hwp_angle_model
 from sotodlib.tod_ops import t2pleakage
 
 nperseg = 200*1000
-bandwidth_f090 = 27.1 * 1e9
-bandwidth_f150 = 36.4 * 1e9
-pW_per_Krj_f090_full = k*bandwidth_f090 * 1e12
-pW_per_Krj_f150_full = k*bandwidth_f150 * 1e12
-pwv_ref = np.array([0.          , 0.3333333333, 0.6666666667, 1.          , 1.3333333333,
-                    1.6666666667, 2.          , 2.3333333333, 2.6666666667, 3.          ])
-Tatm_rj_f090_ref = np.array([ 6.3556491566,  6.7564397072,  7.1697486877,  7.5955414909,  8.033768948 , 
-                             8.4843738835,  8.9472935975,  9.422517075 ,  9.9102161784, 10.410106652 ])
-Tatm_rj_f150_ref = np.array([ 3.3205340822,  4.6600697112,  6.0202319949,  7.4021476475,  8.8062527532,
-                             10.2326073651, 11.6810593533, 13.1517261051, 14.6459678275, 16.1618460923])
-p_zenith_100eff_slope_f090 = np.polyfit(pwv_ref, Tatm_rj_f090_ref * pW_per_Krj_f090_full, deg=1)[0]
-p_zenith_100eff_slope_f150 = np.polyfit(pwv_ref, Tatm_rj_f150_ref * pW_per_Krj_f150_full, deg=1)[0]
+
+# bandwidth_f090 = 27.1 * 1e9
+# bandwidth_f150 = 36.4 * 1e9
+# pW_per_Krj_f090_full = k*bandwidth_f090 * 1e12
+# pW_per_Krj_f150_full = k*bandwidth_f150 * 1e12
+# pwv_ref = np.array([0.          , 0.3333333333, 0.6666666667, 1.          , 1.3333333333,
+#                     1.6666666667, 2.          , 2.3333333333, 2.6666666667, 3.          ])
+# Tatm_rj_f090_ref = np.array([ 6.3556491566,  6.7564397072,  7.1697486877,  7.5955414909,  8.033768948 , 
+#                              8.4843738835,  8.9472935975,  9.422517075 ,  9.9102161784, 10.410106652 ])
+# Tatm_rj_f150_ref = np.array([ 3.3205340822,  4.6600697112,  6.0202319949,  7.4021476475,  8.8062527532,
+#                              10.2326073651, 11.6810593533, 13.1517261051, 14.6459678275, 16.1618460923])
+# p_zenith_100eff_slope_f090 = np.polyfit(pwv_ref, Tatm_rj_f090_ref * pW_per_Krj_f090_full, deg=1)[0]
+# p_zenith_100eff_slope_f150 = np.polyfit(pwv_ref, Tatm_rj_f150_ref * pW_per_Krj_f150_full, deg=1)[0]
 
 
 def load_data(ctx, obs_id, ws, bandpass, debug=False, 
@@ -255,10 +256,59 @@ def get_4f_stats(aman, wrap_stats=True):
             aman.wrap(name, param, [(0, 'dets')])
     return
 
+def linear_interpolation(arr):
+    nan_indices = np.isnan(arr)
+    not_nan_indices = ~nan_indices
+    not_nan_values = arr[not_nan_indices]
+    interpolated_values = np.interp(
+        x=np.arange(len(arr)),
+        xp=np.where(not_nan_indices)[0],
+        fp=not_nan_values
+    )
+    return interpolated_values
+
+def convert_mm_to_pw(pwv, el, band, opteff=1.):
+    bandwidth_f090 = 27.1 * 1e9
+    bandwidth_f150 = 36.4 * 1e9
+    pW_per_Krj_f090_full = k*bandwidth_f090 * 1e12
+    pW_per_Krj_f150_full = k*bandwidth_f150 * 1e12
+    
+    pwv_ref = np.array([0.          , 0.3333333333, 0.6666666667, 1.          , 1.3333333333,
+                        1.6666666667, 2.          , 2.3333333333, 2.6666666667, 3.          ])
+    Tatm_rj_f090_ref = np.array([ 6.3556491566,  6.7564397072,  7.1697486877,  7.5955414909,  8.033768948 , 
+                                 8.4843738835,  8.9472935975,  9.422517075 ,  9.9102161784, 10.410106652 ])
+    Tatm_rj_f150_ref = np.array([ 3.3205340822,  4.6600697112,  6.0202319949,  7.4021476475,  8.8062527532,
+                                 10.2326073651, 11.6810593533, 13.1517261051, 14.6459678275, 16.1618460923])
+    
+    if band == 'f090':
+        pW_per_Krj_full = pW_per_Krj_f090_full
+        Tatm_rj_ref = Tatm_rj_f090_ref
+    elif band == 'f150':
+        pW_per_Krj_full = pW_per_Krj_f150_full
+        Tatm_rj_ref = Tatm_rj_f150_ref
+    
+    zenith_slope, zenith_offset = np.polyfit(pwv_ref, Tatm_rj_ref * pW_per_Krj_full, deg=1)
+    slope = zenith_slope/np.sin(el), 
+    offset = zenith_offset/np.sin(el)
+    return (offset + slope * pwv) * opteff
+
+def get_pwv_correlation(aman):
+    aman.pwv_class = linear_interpolation(aman.pwv_class)
+    pw_from_pwv = convert_mm_to_pw(aman.pwv_class, el=np.median(aman.boresight.el), 
+                                   band=aman.det_info.wafer.bandpass[0], opteff=0.3)
+    aman.wrap('T_from_pwv', pw_from_pwv, [(0, 'samps')])
+    oman = t2pleakage.get_t2p_coeffs(aman, T_sig_name='T_from_pwv', Q_sig_name='demodQ_tele', U_sig_name='demodU_tele',
+                                     merge_stats=False, flag_name='glitches')
+    aman.wrap('leakage4f_Q_tele_pwv', oman.coeffsQ, [(0, 'dets'), ])
+    aman.wrap('leakage4f_U_tele_pwv', oman.coeffsU, [(0, 'dets'), ])
+    aman.wrap('leakage4f_P_tele_pwv', np.sqrt(oman.coeffsQ**2 + oman.coeffsU**2), [(0, 'dets'), ])
+    return
+    
 def process_aman(aman, subtract_hwpss=False):
     wrap_fp_coords(aman)
     aman = tod_process(aman, subtract_hwpss=subtract_hwpss)
     get_4f_stats(aman, wrap_stats=True)
+    get_pwv_correlation(aman)
     return aman
     
 def remove_tods(aman):
